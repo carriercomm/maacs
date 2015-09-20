@@ -165,6 +165,13 @@
       });
     },
 
+    upload: function() {
+      $("#upload").modal({keyboard: true, show: true, backdrop: false});
+      $.get("/misc/upload", function(data) {
+        $("#upload .modal-body").html(data).get(0).scrollTop = 0;
+      });
+    },
+
     toggleFullscreen: function() {
 
       var isFullscreen = Jingo.cmInstance.getOption("fullScreen");
@@ -179,8 +186,10 @@
 
       $toolbar = $("<ul class='toolbar'>");
       $toolbar.append("<li title=\"Toggle fullscreen (Ctrl/Cmd+Enter)\" class=\"fullscreen\"><span></span></li>\
+        <li title=\"Upload\" class=\"upload\"><span></span></li>\
         <li title=\"Syntax help\" class=\"info\"><span></span></li>\
-        <li title=\"Preview\" class=\"preview\"><span></span></li></ul>").insertBefore($("form.edit textarea:first").closest("div"));
+        <li title=\"Preview\" class=\"preview\"><span></span></li>\
+        </ul>").insertBefore($("form.edit textarea:first").closest("div"));
 
       $("ul.toolbar").on("click", "span", function() {
         if (this.parentNode.className == "info") {
@@ -192,6 +201,9 @@
         }
         if (this.parentNode.className == "fullscreen") {
           Jingo.toggleFullscreen();
+        }
+        if (this.parentNode.className == "upload") {
+          Jingo.upload();
         }
       });
     },
