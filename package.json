@@ -46,7 +46,7 @@
     "passport-local": "^1.0.0",
     "semver": "^2.3.2",
     "serve-favicon": "^2.1.7",
-    "multer": "*",
+    "multer": "*"
   },
   "devDependencies": {
     "chai": "*",
