@@ -1,0 +1,1382 @@
+<html>
+<body>
+<script src="/maacs/maacs.js" type="text/javascript"></script>
+<script src="/maacs/jquery-2.1.4.js" type="text/javascript"></script>
+<h2>Query</h2>
+    <p>
+        By pushing the <i>Fetch Views</i> button below the database will be queried
+        for any views (images). These can be edited, inspected, or downloaded. I hope
+        to soon add some criteria here for filtering the results.
+    </p>
+    <p>
+        <input type="submit" value="Fetch Views" onclick="maacsiface.query_views()"/>
+    </p>
+<h2>Results</h2>
+This is the results of pushing the <i>Fetch Views</i> button above.
+<div id="query_cont">
+</div>
+<br/>
+<div id="images"></div>
+<h2>View Edit, Upload, and Download</h2>
+<div id="imgctrl_cont_working" style="padding: 10px; margin: 40px; border: 5px dashed #999999; background-color: #996666; border-radius: 10px;">
+The information is being uploaded to the database.. Please wait...
+</div>
+<div id="imgctrl_cont" style="padding: 5px; border: 10px dashed #d0d0d0; background-color: #dddddd; border-radius: 5px;">
+        This allows you to upload images or edit existing images in the system.
+        <div id="canvas_wrapper">
+            <canvas onkeydown="maacsiface.canvas_keydown" style="cursor: crosshair; border: 1px dashed #999999;" width="100" height="100" id="dcv"/>
+        </div>
+        <div>
+            Fetch Quality: <input type="input" id="imgctrl_fetch_quality" value="25" size="3"/>
+            <input type="submit" value="Refetch" onclick="maacsiface.refetch_image()"/>
+        </div>
+        <div>
+            <form id="imgctrl_form" action="/maacs/interface" method="POST" enctype="multipart/form-data"> 
+                <input type="file" name="imgdata" id="fimg_up" onchange="maacsiface.imgctrl_picked_image()"/>
+                <input type="hidden" id="imgctrl_form_params" name="params"/>
+            </form>
+            <div>
+                Zoom: &nbsp;
+                <input type="submit" onclick="maacsiface.zoom_out()" style="font-size: 16pt;" value="+"/>
+                <input type="submit" onclick="maacsiface.zoom_in()" style="font-size: 16pt;" value="-"/>
+            </div>
+        </div>
+        <div id="clickinfo">
+        <i>[click in image to get coordinates]</i>
+        </div>
+        <div id="imgctrl_db_view_id">
+        <i>No Image Loaded</i>
+        </div>
+
+        <div id="imgctrl_img_params_cont">
+        </div>
+        <input type="submit" value="Push Image Or Changes To Database" onclick="maacsiface.imgctrl_push()"/>
+</div>
+<style>
+.qtable tr td {
+    border: 1px dashed #999999;
+    padding: 8px;
+}
+
+.ComplexInputContainer {
+	margin: 0px;
+	padding: 1px;
+	font-size: 8pt;
+}
+.ComplexInputContainer_Sub {
+	display: block;
+	margin: 0px;
+	padding: 1px;
+	border: 1px dashed gray;
+	font-size: 8pt;
+}
+.ComplexInput_Cont {
+	margin: 0px;
+	padding: 1px;
+	font-size: 8pt;
+	display: inline-block;
+}
+.ComplexInput_Cont_Sub {
+	display: inline-block;
+}
+.ComplexInput_ContSelect {
+	margin: 3px;
+	padding: 3px;
+	font-size: 8pt;
+	display: inline-block;
+}
+.ComplexInput_Input {
+	margin: 3px;
+	padding: 3px;
+	font-size: 8pt;
+	display: inline-block;
+	background-color: rgba(0, 0, 0, 0);
+}
+</style>
+<script type="text/javascript">
+	function ComplexComboContainer (list) {
+		var dom = document.createElement('div');
+		var dom_wipeable = document.createElement('div');
+		
+		dom.className = 'ComplexInputContainer';
+
+		dom.cc_list = {};
+		dom.cc_ccid_to_desc = {};
+		
+		var picker = document.createElement('select');
+		var adder = document.createElement('input');
+
+		for (var ccid in list) {
+			var base = ccid.substr(0, ccid.indexOf('#'));
+			var desc = ccid.substr(ccid.indexOf('#') + 1);
+			dom.cc_ccid_to_desc[base] = desc;
+			dom.cc_list[base] = list[ccid];
+			$(picker).append('<option value="' + ccid + '">' + desc + '</option>'); 
+		}
+		
+		$(dom).append(adder, ' ', picker, dom_wipeable);
+		
+		adder.type = 'submit';
+		adder.value = 'Add';
+		
+		dom.cc_clear = function () {
+			$(dom_wipeable).empty();
+		};
+
+		dom.cc_force_picker = function (ccid, cc_iparams) {
+			adder.addone(ccid, cc_iparams);
+		};		
+		
+		adder.onclick = function () {
+			this.addone();
+		};
+		 
+		adder.addone = function (ccid, cc_iparams) {
+			ccid = ccid || picker.value;
+			
+			if (ccid.indexOf('#') > -1) {
+				ccid = ccid.substr(0, ccid.indexOf('#'));
+			}
+			
+			var cont = document.createElement('div');
+						
+			cont.cc_id = ccid;
+			
+			// Do not trust that the description will be passed
+			// to this function, and do not trust it if it is 
+			// passed to this function (for now).
+			// TODO: consider allowing description to be passed in 
+			cont.cc_desc = dom.cc_ccid_to_desc[ccid];
+			
+			var cc_template = dom.cc_list[ccid];
+			
+			var cc = (new ComplexCombo(cc_template, cc_iparams)).temp;
+			
+			var remover = document.createElement('input');
+			
+			cont.className = 'ComplexInputContainer_Sub';	
+
+			remover.type = 'submit';
+			remover.value = 'Remove Parameter';
+			remover.onclick = function () {
+				$(cont).remove();
+			};
+			
+			cont.cc = cc;
+
+			$(cont).append('<b>' + cont.cc_desc + '</b>: ');			
+			$(cont).append(cc);
+			$(cont).append(remover);
+			$(dom_wipeable).append(cont); 
+		};
+		
+		dom.cc_enum = function () {
+			var out = {};
+			var conts = $(dom_wipeable).find('div');
+			for (var x = 0; x < conts.length; ++x) {
+				if (conts[x].cc_id == undefined) {
+					continue;
+				}
+				var key = conts[x].cc_id;
+				out[key] = out[key] || [];
+				out[key].push(conts[x].cc.get_complex_value());
+			}
+			return out;
+		};
+		
+		return dom;
+	}
+		
+	function ComplexCombo(options, iparams) {
+		this.options = options;
+		this.temp = this.produce_dom(iparams);
+		return this;
+	}
+	
+	ComplexCombo.prototype.produce_dom = function (iparams) {
+		var cont = document.createElement('div');
+		var contselect = document.createElement('select');
+		$(cont).append(contselect);
+		
+		iparams = iparams || {};
+		
+		cont.className = 'ComplexInput_Cont';
+		contselect.className = 'ComplexInput_ContSelect';
+		
+		cont.is_complex_combo = true;
+
+		var first = true;	
+		var self = this;
+		
+		this.dblinks = {};
+		
+		contselect.onchange = function () {
+			$(self.cont_showing).hide();
+			self.cont_showing = self.options[this.value].cont;
+			$(self.options[this.value].cont).show();
+		};	
+		
+		//if (!this.options.$value_adapter && this.options.skyref) {
+		//	debugger;
+		//}
+		
+		if (this.options.$value_adapter) {
+			cont.$value_adapter = this.options.$value_adapter;
+		}
+		
+		this.field_to_dom = {};
+		
+		for (var opid in this.options) {
+			if (opid == '$value_adapter') {
+				continue;
+			}
+			
+			var fields = this.options[opid].fields;
+			var opname = this.options[opid].name;			
+			
+			$(contselect).append('<option value="' + opid + '">' + opname + '</option>');
+			
+			var opcont = document.createElement('div');
+			opcont.className = 'ComplexInput_Cont_Sub';
+			$(cont).append(opcont);
+			
+			this.options[opid].cont = opcont;
+			
+			// (1) Only show one option container at a time.
+			// (2) Make sure one is shown.
+			// (3) Until option added for default then make first default.
+			if (!iparams.opid) {
+				if (!first) {
+					$(opcont).hide();
+				} else {
+					contselect.value = opid;
+					this.cont_showing = opcont;
+				}
+			} else {
+				if (iparams.$opid != opid) {
+					$(opcont).hide();
+				} else {
+					contselect.value = opid;
+				}
+			}
+			first = false;
+			
+			for (var fid in fields) {
+				var ftype = fields[fid].type;
+				var fname = fields[fid].name;
+				switch (ftype) {
+					case 'select':
+						var opcontselect = document.createElement('select');
+						opcontselect.className = 'ComplexInput_Input';
+						var options = fields[fid].options;
+						//fields[fid].domel = opcontselect;
+						this.field_to_dom[fid] = opcontselect;
+						$(opcont).append(fname + ': ', opcontselect);
+						for (var opkey in options) {
+							$(opcontselect).append('<option value="' + opkey + '">' + options[opkey] + '</option>');
+						}
+						
+						if (iparams[fid]) {
+							opcontselect.value = iparams[fid];
+						}
+						
+						break;
+					case 'radec':
+					case 'realnumber':
+					case 'datebox':
+					case 'editbox':
+						var opconteditbox = document.createElement('input');
+						opconteditbox.className = 'ComplexInput_Input';
+						//fields[fid].domel = opconteditbox;
+						this.field_to_dom[fid] = opconteditbox;
+						opconteditbox.type = 'input';
+						$(opcont).append(fname + ': ', opconteditbox);
+						
+						if (iparams[fid]) {
+							opconteditbox.value = iparams[fid];
+						}
+						break;
+					case 'paragraph':
+						var optcontpara = document.createElement('textarea');
+						optcontpara.className = 'ComplexInput_Input';
+						optcontpara.cols = fields[fid].cols || 60;
+						optcontpara.rows = fields[fid].rows || 10;
+						$(opcont).append(fname + ': ', optcontpara);
+						//fields[fid].domel = optcontpara;
+						this.field_to_dom[fid] = optcontpara;
+						
+						if (iparams[fid]) {
+							optcontpara.value = iparams[fid];
+						}
+						break;
+					case 'dblink':
+						var fetchf = fields[fid].fetch;
+						var addf = fields[fid].add;
+						var delf = fields[fid].del;
+						var category = fields[fid].category;
+						
+						var el = document.createElement('select');
+						
+						//fields[fid].domel = el;
+						this.field_to_dom[fid] = el;
+
+						var addcont = document.createElement('div');						
+						
+						var eb = document.createElement('input');
+						var ab = document.createElement('input');
+						var db = document.createElement('input');
+						
+						eb.type = 'input';
+						ab.type = 'submit';
+						ab.value = 'Add New Entry';
+						db.value = '[D]';
+						db.type = 'submit';
+						
+						ab.onclick = function () {
+							if (confirm('Are you sure you wish to add "' + eb.value + '" to the database?')) {
+								$(el).empty();
+								addf(category, eb.value, function () {
+									el.refetch();
+								});
+							}
+						};
+						
+						db.onclick = function () {
+							if (confirm('Are you sure you wish to delete "' + el.value + '" form the database?')) {
+								delf(category, el.value, function () {
+									el.refetch();
+								});
+								$(el).empty();
+							}
+						};
+
+						el.refetch = function (defid) {
+							$(el).empty();
+							fetchf(category, function (pairs) {
+								$(el).empty();
+								console.log('here');
+								for (var k in pairs) {
+									$(el).append('<option value="' + k + '">' + pairs[k] + '</option>');
+								}					
+								
+								$(el).append('<option value="$$$$">[Other]</option>');
+								
+								el.value = defid;
+							});
+						};					
+						
+						$(addcont).hide();	
+					
+						$(addcont).append(eb);
+						$(addcont).append(ab);
+						
+						el.onchange = function () {
+							if (this.value == '$$$$') {
+								$(addcont).show();
+							} else {
+								$(addcont).hide();
+							}
+						};
+						
+						$(opcont).append(el);
+						$(opcont).append(db);
+						$(opcont).append(addcont);
+						
+						el.refetch(iparams[fid]);
+						
+						break;		
+				}
+			}			
+		}
+		
+		cont.get_complex_value = function () {
+			var out = {};
+			var fields = self.options[contselect.value].fields;
+			for (var fid in fields) {
+				//var domel = fields[fid].domel;
+				var domel = self.field_to_dom[fid] 
+				out[fid] = domel.value;
+			}
+			if (this.$value_adapter) {
+				// This allows us to trap the outputs and return what we desire
+				// based on the inputs. It allows us to produce a simple value
+				// from a complex value. We can also directly pick up elements
+				// that might be custom inside this container using the second
+				// parameter (hackish method if needed is easily usable).
+				return this.$value_adapter(out, this, self.field_to_dom);
+			}
+			return out;
+		};
+		
+		return cont;
+	};
+
+    // TODO: detach from all variables outside this scope
+    function MaacsInterface(params) {
+        var catalog_ids = {};
+        		          
+        this.img_params_cont = params.img_params_cont;
+
+		  var rate_scale_options = {
+  				'0.0':    '0 - worst',
+  				'0.14':   '1 - bad',
+  				'0.28':   '2 - okay',
+  				'0.42':   '3 - decent',
+  				'0.57':   '4 - not bad',
+  				'0.71':   '5 - like it',
+  				'0.85':   '6 - love it',
+  				'1.0':    '7 - will show it to everyone',
+		  };
+		  
+		  var self = this;
+
+		  var constants_cache = {};
+
+		  function db_constants_resolve_many (pairs, cb) {
+		  		var out = {};
+		  				  		
+		  		function do_one(x) {
+		  			db_constants_resolve(pairs[x][1], pairs[x][2], function (id) { return function (v) {
+		  				out[id] = v;
+		  				++x;
+		  				if (x >= pairs.length) {
+		  					cb(out);
+		  					return;
+		  				}
+		  				do_one(x);
+		  			};}(pairs[x][0]));
+		  		}
+		  		do_one(0);
+		  }
+
+		  function db_constants_resolve (category, id, cb) {
+		  		// TODO: consider returning null instead of $error_codes$, but
+		  		//       then again we might need to fully log this condition
+		  		//       somewhere.. this fix is not likely trivial
+		  		if (constants_cache[category] == undefined) {
+		  			if (!cb) {
+		  				return null;
+		  			}
+		  			db_constants_fetch(category, function () {
+		  				if (constants_cache[category] == undefined) {
+		  					cb('$category_error$');
+		  					return;
+		  				}
+		  				console.log('!!!!', id,  constants_cache[category]);
+		  				cb(constants_cache[category][id] || '$unresolved_error$');
+		  			});
+		  			return;
+		  		}
+		  		
+		  		if (!cb) {
+		  			return constants_cache[category][id];
+		  		}
+		  		
+		  		cb(constants_cache[category][id] || '$unresolved_error$');
+		  }		  
+		  
+		  function db_constants_fetch (category, cb) {
+		  		self.ioperation({
+		  				op:			'constants.fetch',
+		  				category: 	category,
+		  			},
+		  			function (pairs) {
+		  				console.log('calling cb');
+		  				constants_cache[category] = pairs;
+		  				cb(pairs);
+		  			}
+		  		);
+		  }
+		  
+		  function db_constants_add(category, description, cb) {
+		  		self.ioperation({
+		  				op:			 'constants.add',
+		  				category:	 category,
+		  				description: description,
+		  			},
+		  			function () {
+		  				cb();
+		  			}
+		  		);
+		  }
+		  
+		  function db_constants_del(category, id, cb) {
+		  		self.ioperation({
+		  				op:			'constants.del',
+		  				category:	category,
+		  				id:			id,
+		  			},
+		  			function () {
+		  				cb();
+		  			}
+		  		);
+		  }
+        
+        this.ccc = ComplexComboContainer({
+        	'image_rating#Image Rating': {
+        		normal_scale: {
+        			name:  'Normal Scale',
+        			fields: {
+        				scale: {
+        					name:   'Scale',
+        					type:   'select',
+		        			options: rate_scale_options,
+		        		},
+	        		},
+        		},
+        		best_since_scale: {
+        			name: 'Best Since Scale',
+        			fields: {
+        				since: {
+        					name:  'Since-Date',
+        					type:  'datebox',
+        				},
+        				scale: {
+        					name:	 'Scale',
+        					type:  'select',
+        					options: rate_scale_options,
+        				},
+        			},
+        		},
+        	},
+        	'operator#Operator': {
+        		vary: {
+        			name: 'Operator',
+        			fields: {
+        				name: { name: 'Name', type: 'editbox' },
+        			}
+        		}
+        	},
+        	'assistant#Assistant': {
+        		vary: {
+        			name: 'Assistant',
+        			fields: {
+        				name: { name: 'Name', type: 'editbox' }, 
+        			}
+        		}
+        	},
+        	'subject#Subject': {
+        		subject: { name: 'Subject', fields: { subject: { name: 'Subject', type: 'editbox' } } }
+        	},
+        	'notes#Notes': {
+        		notes: { name: 'Notes', fields: { notes: { name: 'Notes', type: 'paragraph' } } }
+        	},
+        	'shutter_time#Shutter-Time': {
+        		shutter_time: { name: 'Shutter-time', fields: { shutter_time: { name: 'Shutter-Time', type: 'editbox' } } }
+        	},
+        	'aperture#Aperture': {
+        		aperture: { name: 'Aperture', fields: { aperture: { name: 'Aperture', type: 'editbox' } } }
+        	},
+        	'iso_speed#ISO Speed': {
+        		iso_speed: { name: 'ISO Speed', fields: { iso_speed: { name: 'ISO Speed', type: 'editbox' } } }
+        	},
+        	'focal_length#Focal Length': {
+        		focal_length: { name: 'Focal Length', fields: { focal_length: { name: 'Focal Length', type: 'editbox' } } }
+        	},
+        	'focal_length_35mm#35mm Focal Length': {
+        		focal_length_35mm: { name: '35mm Focal Length', fields: { focal_length_35mm: { name: '35mm Focal Length', type: 'editbox' } } } 
+        	},
+			'white_balance#White Balance': {
+				white_balance: { name: 'White Balance', fields: { white_balance: { name: 'White Balance', type: 'editbox' } } }
+			},
+			'camera#Camera': {
+				camera: { name: 'Camera', fields: { camera: { name: 'Camera', type: 'dblink', fetch: db_constants_fetch, add: db_constants_add, del: db_constants_del, category: 'cameras' } } }
+			},
+			'telescope#Telescope': {
+				camera: { name: 'Telescope', fields: { telescope: { name: 'Telescope', type: 'dblink', fetch: db_constants_fetch, add: db_constants_add, del: db_constants_del, category: 'telescopes' } } }
+			},
+			'datesource#Date Source': {
+				datesource: { name: 'Date Source', fields: { datesource: { name: 'Date Source', type: 'dblink', fetch: db_constants_fetch, add: db_constants_add, del: db_constants_del, category: 'datesources' } } }
+			},
+			'datetaken#Date Taken': {
+				datetaken: { name: 'Date Taken', fields: { datetaken: { name: 'Date Taken', type: 'datebox' } } }
+			},
+			'skyref#Sky Reference': {
+				$value_adapter: function (pairs, dom, fields) {
+					var ra = pairs['j2000_ra'];
+					var de = pairs['j2000_de'];
+					ra = maacs.util.parse_radec(ra);
+					de = maacs.util.parse_radec(de);
+					var error = [];
+					if (ra.result) {
+						pairs['j2000_ra'] = ra.result;
+					} else {
+						error.push(ra.error);
+					}
+					if (de.result) {
+						pairs['j2000_de'] = de.result;
+					} else {
+						error.push(de.error);
+					}
+					if (error.length > 0) {
+						error.push('A skyref had some errors..');
+						alert(error.join('..'));
+					}
+					pairs.$uservalue = function (v) {
+						if (v) {
+							dom.skyref_uservalue = v;
+						}
+						return dom.skyref_uservalue;
+					};
+					pairs.$x = function (v) {
+						if (v) { 
+							fields.x.value = v;
+						}
+						return fields.x.value;
+					};
+					pairs.$y = function (v) {
+						if (v) {
+							fields.y.value = v;
+						}
+						return fields.y.value;
+					}; 
+					return pairs;
+				},
+				skyref: { name: 'Sky Ref', fields: { 
+					j2000_ra: { name: 'J2000.RA', type: 'radec' }, 
+					j2000_de: { name: 'J2000.DE', type: 'radec' },
+					x: { name: 'Pixel.X', type: 'realnumber' },
+					y: { name: 'Pixel.Y', type: 'realnumber' },
+					cat: { name: 'Catalog', type: 'dblink', fetch: db_constants_fetch, add: db_constants_add, del: db_constants_del, category: 'catalogs' },
+					id: { name: 'ID', type: 'editbox' },
+				}},
+			},
+        });
+        
+        $(this.img_params_cont).append(this.ccc);
+        
+        var pusher = document.createElement('input');
+        pusher.type = 'submit';
+        pusher.value = 'Push To Database';
+        pusher.onclick = function () {
+        		console.log(ccc.cc_enum());
+        };
+
+        /*
+            Any properties are defined here even if not used.
+
+            TODO: define all properties
+        */
+        this.query_cont = params.query_cont;
+        this.constants = null;
+        this.filepushurl = null;
+        this.coord_clicked_x = 0;
+        this.coord_clicked_y = 0;
+        this.skyref_box_width = 50;
+        this.skyref_selected = null;
+        this.canvas_wrapper = params.canvas_wrapper;
+
+        var self = this;
+
+        this.ioperation = function (params, cb) {
+            $.post('/maacs/interface', 'params=' + encodeURIComponent(JSON.stringify(params)), function (data) {
+                var _err;
+                try {
+                    data = JSON.parse(data);
+                    _err = null;
+                } catch (err) {
+                    data = null;
+                    _err = err;
+                }
+                if (cb) {
+                	cb(data, _err);
+                }
+            });
+        };
+
+        imgctrl_db_view_id.__id = null;
+
+        $(imgctrl_cont_working).hide();
+
+        this.query_views = function () {
+            this.ioperation({
+                op:         'view.query',
+                filters:    [],
+            }, function (result) {
+                $(query_cont).empty();
+                var tbl = document.createElement('table');
+                tbl.className = 'qtable';
+                $(tbl).append([
+                    '<thead>',
+                    '<td>Edit</td>',
+                    '<td>ID</td>',
+                    '<td>Telescope</td>',
+                    '<td>Camera</td>',
+                    '<td>Date-Taken</td>',
+                    '<td>Date-Source</td>',
+                    '<td>Notes</td>',
+                    '<td>Image-ID</td>',
+                    '<td>SkyRef-Count</td>',
+                ].join(''));
+                for (var x = 0; x < result.views.length; ++x) {
+                    var view = result.views[x];
+                    console.log('view-rec', view);
+                    pairs = [
+                    	['telescope', 'telescopes', view.telescope],
+                     ['camera', 'cameras', view.camera],
+                    	['datesource', 'datesources', view.datesource],
+                    ];
+                    db_constants_resolve_many(pairs, function (pairs) {
+	                    $(tbl).append([
+	                        '<tr>',
+	                        '<td><input type="submit" value="Edit" onclick="maacsiface.edit_view(' + view.id + ')"></td>',
+	                        '<td>', view.id, '</td>',
+	                        '<td>', pairs.telescope, '</td>',
+	                        '<td>', pairs.camera, '</td>',
+	                        '<td>', view.datetaken, '</td>',
+	                        '<td>', pairs.datesource, '</td>',
+	                        '<td>', view.notes, '</td>',
+	                        '<td>', view.image_id, '</td>',
+	                        '<td>', view.skyref_count, '</td>',
+	                        '</tr>'
+	                    ].join(''));
+	                 });
+                }
+                $(query_cont).append(tbl);
+            });
+        };
+
+        this.enum_skyrefs = function () {
+				var params = this.ccc.cc_enum();
+            return params.skyref || [];
+        };
+
+        this.imgctrl_push = function () {            
+            var params = this.ccc.cc_enum();
+            
+            // (1) Convert multiple entries into single strings.
+            if (k == 'operators' || k == 'assistants') {
+           		var s = [];
+            	for (var x = 0; x < params[k].length; ++x) {
+            		s.push(params[k][x]);
+            	}
+            	params[k] = s.join(',');
+            }
+            
+            // (1) Convert entries with arrays having one item into single values.
+            // (2) Drop entries with multiple items in an array.
+            for (var k in params) {
+            	if (params[k].length == 1) {
+            		// If this fails then it needed a $value_adapter in place
+            		// so that it could return the correct form of value.
+            		//
+            		// TODO: consider.. fixing this [k][0][k] (redundant k)
+            		//       the solution may not be trivial
+            		params[k] = params[k][0][k];
+            		continue
+            	}
+            	
+            	delete params[k];
+            }
+
+            var skyrefs = this.enum_skyrefs();
+
+            var tmp = document.createElement('canvas');
+            tmp.width = cv.width;
+            tmp.height = cv.height;
+            {
+                var tmpctx = tmp.getContext('2d');
+                tmpctx.drawImage(cv, 0, 0);
+            }
+
+            var fd = new FormData();
+
+            if (isNaN(new Date(params.datetaken))) {
+                alert('The date field is not in the proper format.');
+                return;
+            }
+
+            if (imgctrl_db_view_id.__id == null) {
+                fd.append('imgdata', fimg_up.files[0]);
+            }
+
+            function isnum(v) {
+                if (!isNaN(parseFloat(v))) {
+                    return true;
+                }
+                return false;
+            }
+
+            for (var x = 0; x < skyrefs.length; ++x) {
+                var skyref = skyrefs[x];
+                if (!isnum(skyref.x) || !isnum(skyref.y) || !isnum(skyref.j2000_ra) || !isnum(skyref.j2000_de)) {
+                    alert('Opps.. It looks like one of your sky ref entries has something that should be a number, but it is not!');
+                    return;
+                }
+            }
+            
+            params.op = 'view.push';
+            params.view_id = imgctrl_db_view_id.__id;
+            params.skyrefs = skyrefs;
+            params.datetaken = (new Date(params.datetaken)).getTime() / 1000;
+            
+            console.log('@@-@@', params);
+
+            fd.append('params', JSON.stringify(params));
+
+            var xhr = new XMLHttpRequest();
+
+				// Open a connection and handle the results.
+            xhr.open('POST', '/maacs/interface', true);
+            xhr.onload = function () {
+                $(imgctrl_cont).show();
+                $(imgctrl_cont_working).hide();
+                
+                var data;
+                try {
+                	data = JSON.parse(this.responseText);
+                } catch (err) {
+                	data = null;
+                }
+                
+                if (xhr.status == 200) {
+                	if (data && data.success) {
+                		alert('The data was pushed to the server, and the server reported success.');
+                		imgctrl_db_view_id.__id = data.view_id;
+                	} else {
+                		if (!data) {
+                			alert('The data was pushed to the server, but the response was not understood');
+                		} else {
+                			alert('The data was pushed to the server, but the server rejected it saying: ' + data.err ? data.err : '<server reason not understood>');
+                		}
+                	}
+                } else {
+                    alert('Something went wrong pushing image to the database.. Error: ' + (data && data.err ? data.err : '<reason code not found>'));
+                }
+            };
+
+				// Send the parameters to the server, and optionally the image data.
+            xhr.send(fd);
+        };
+
+        this.add_sky_ref = function (params) {
+            params = params || {};
+            var j2000_ra = params.j2000_ra || '';
+            var j2000_dec = params.j2000_dec || '';
+            var x = params.x || '';
+            var y = params.y || '';
+            var cat = params.cat || '';
+            var objid = params.id || '';
+
+            var elsr = document.createElement('div');
+            elsr.setAttribute('style', 'padding: 10px; margin: 5px; border: 2px dashed #eeeeee; background-color: #dddddd; border-radius: 5px;');
+            var elcatalog = document.createElement('select');
+            var elrem = document.createElement('input');
+
+				var ej2000ra = document.createElement('input');
+				var ej2000de = document.createElement('input');
+				var ex = document.createElement('input');
+				var ey = document.createElement('input');
+				
+				ej2000ra.type = 'input';
+				ej2000ra.value = j2000_ra;
+				ej2000ra.size = '9';
+				
+				ej2000de.type = 'input';
+				ej2000de.value = j2000_dec;
+				ej2000de.size = '9';
+				
+				ex.type = 'input';
+				ex.value = x;
+				ex.size = '5';
+
+				ey.type = 'input';
+				ey.value = y;
+				ey.size = '5';
+
+            $(elsr).append('J2000.RA: ', ej2000ra);
+            $(elsr).append('J2000.DEC: ', ej2000de);
+            $(elsr).append('image-x: ', ex);
+            $(elsr).append('image-y: ', ey);
+
+            for (var k in this.constants.catalogs) {
+                $(elcatalog).append('<option value="' + k + '">' + catalog_ids[k] + '</option>');    
+            }
+            
+            elcatalog.value = cat;
+            $(elsr).append('catalog: ', elcatalog);
+            $(elsr).append('object-id: <input class="id" value="' + objid + '" type="input">');
+            elrem.type = 'submit';
+            elrem.value = 'Remove';
+            elrem.onclick = function () {
+                $(elsr).remove();
+            };
+            $(elsr).append(elrem);
+            $(imgctrl_skyrefs).append(elsr);
+
+				// For parsing real number fields.
+				function __a(el) {
+					return function (v) {
+						var r = parseFloat(el.value);
+						if (v != undefined) {
+							el.value = v;
+						}
+						return r;
+					};
+				}
+				
+				// For parsing fields containing RA or DEC in the
+				// format of or either below:
+				//		(1)		<hours>h<minutes>m<seconds>s
+				//		(2)   	<degrees>d<minutes>m<seconds>s
+				function __b(el) {
+					return function (v) {
+						var r = maacs.util.parse_radec(el.value);
+						if (r.result == null) {
+							alert('One of the sky reference fields for the RA and DEC was not in the proper format. Error(' + r.error + ')');
+							return 0;
+						}
+						if (v != undefined) {
+							el.value = v;
+						}
+						return r.result;
+					}
+				}
+
+				elsr.skyref_selected = function (v) {
+					var r = this.x_selected;
+					if (v != undefined) {
+						this.x_selected = v;
+					}
+					return r;
+				};
+				
+				elsr.skyref_x = __a(ex);
+				elsr.skyref_y = __a(ey);
+				elsr.skyref_j2000_ra = __b(ej2000ra);
+				elsr.skyref_j2000_de = __b(ej2000de);
+            
+            console.log('added skyref');
+        }
+
+        var cv = new Image();
+        var nw;
+        var nh;
+        var nx;
+        var ny;
+        var scale = 0;
+        var lcx = 0;
+        var lcy = 0;
+
+        this.pixel_to_image_pixel = function (p) {
+            return p * self.get_scale_factor();
+        };
+
+        this.rndr = function () {
+            var dctx = dcv.getContext('2d');
+            var _nw = Math.floor(nw * Math.pow(6, scale));
+            var _nh = Math.floor(nh * Math.pow(6, scale));
+            dcv.width = $(dcv).parent().width(); //nx < 0 ? _nw + nx : _nw;
+            dcv.height = 800; //ny < 0 ? _nh + ny : _nh;
+            dctx.drawImage(cv, 0, 0, cv.width, cv.height, nx * this.get_scale_factor(), ny * this.get_scale_factor(), _nw, _nh);
+
+            var self = this;
+            function gp(p) {
+                return p * self.get_scale_factor();
+            }
+
+            var bw = this.skyref_box_width;
+            var bwh = bw * 0.5;
+
+            var skyrefs = this.enum_skyrefs();
+            var params = this.ccc.cc_enum();
+            
+            /*
+            	Convert the skyref RA and DEC to the userdate epoch using
+            	the date of the image.
+            */
+            if (!params.datetaken) {
+            	return;
+            }
+            
+				var userdate = new Date(params.datetaken[0].datetaken);
+				
+				if (isNaN(userdate.getTime())) {
+					alert('The date specified for the image is not correctly formatted. The skyrefs will not be drawn, because they will be incorrect.');
+					return;
+				}
+				
+				userdate = userdate.getUTCMonth() / 12 + userdate.getUTCFullYear();
+				
+				for (var x = 0; x < skyrefs.length; ++x) {
+					var skyref = skyrefs[x];
+					var udradec = maacs.util.transform_j2000_useryear(
+						skyref.j2000_ra, skyref.j2000_de, userdate
+					);
+					
+					skyref.j2000_ra = udradec[0];
+					skyref.j2000_de = udradec[1];
+				}		            
+            
+            //console.log(maacs.util.transform_j2000_useryear(
+				//	10.2799, 39.4587, 2015.9
+				//));
+
+            var realign = maacs.util.compute_radec_alignment(skyrefs);
+            var pp;
+            if (realign.angle != null) {
+            	pp = maacs.util.compute_pp(skyrefs, realign);
+            } else {
+            	pp = null;
+            }
+
+            for (var x = 0; x < skyrefs.length; ++x) {
+                var skyref = skyrefs[x];    
+    
+                var color_a;
+                var color_b;
+                if (skyref.$uservalue()) {
+                    color_a = '#ff9999';
+                    color_b = '#ee9999';
+                } else {
+                    color_a = '#99ff99';
+                    color_b = '#99ee99';
+                }
+
+                dctx.beginPath();
+                dctx.lineWidth = '2';
+                dctx.strokeStyle = color_a;
+                var px = nx + parseFloat(skyref.x);
+                var py = ny + parseFloat(skyref.y);
+                dctx.rect(gp(px - bwh), gp(py - bwh), gp(bw), gp(bw));
+                dctx.stroke();
+                dctx.beginPath();
+                dctx.lineWidth = '1';
+                dctx.strokeStyle = color_a;
+                dctx.moveTo(gp(px - bwh), gp(py));
+                dctx.lineTo(gp(px + bwh), gp(py));
+
+                dctx.moveTo(gp(px), gp(py - bwh));
+                dctx.lineTo(gp(px), gp(py + bwh));
+
+                dctx.font = '10pt Arial';
+                dctx.fillStyle = '#ffffff';
+
+
+                var error_rade = realign.error_per[x];
+                
+                var txt_extra;
+                if (pp) { 
+                	txt_extra = ' error(' + Math.sqrt(Math.pow(pp.error_per[x].x, 2) + Math.pow(pp.error_per[x].y, 2)) + ')';
+                } else {
+                	txt_extra = ' <not enough skyrefs maybe?>';
+                }
+
+					 var cat = db_constants_resolve('catalogs', skyref.cat);                
+                
+                var txt = (cat ? cat + ' ' : '<cat-unresolved>') + skyref.id + txt_extra;
+
+                dctx.fillText(
+                    txt, gp(px - bw), gp(py - bw - 11)
+                );
+
+                dctx.stroke();
+            }
+
+				var p = new Vec2(Math.sin(realign.angle), Math.cos(realign.angle));            
+
+				p = p.scalar_mul(100);
+
+				var c = new Vec2(gp(nx) + _nw * 0.5, gp(ny) + _nh * 0.5);            
+
+				p = p.add(c);
+            
+            dctx.moveTo(c.x, c.y);
+            dctx.lineTo(p.x , p.y);
+            dctx.lineTo(p.x - 10, p.y);
+            dctx.moveTo(p.x, p.y);
+            dctx.lineTo(p.x + 10, p.y);
+            
+            dctx.stroke();
+            
+            console.log('realign.error', realign.error, 'pp.error', pp.error);
+        }
+
+        var self = this;
+
+		  $(document).keydown(function (e) {
+		      e = e || window.event;
+				      
+		      if (!self.skyref_selected) {
+		      	return;
+		      }
+
+				var skyref = self.skyref_selected;
+
+		  		switch (e.keyCode) {
+		  			case 27:
+		  				skyref.$uservalue(false);
+		  				self.skyref_selected = null;
+		  				self.rndr();
+		  				break;
+		  			case 65: // left
+		  				skyref.$x(skyref.$x() - 0.1);
+		  				self.rndr();
+		  				break;
+		  			case 87: // up
+		  				skyref.$y(skyref.$y() - 0.1);
+		  				self.rndr();
+		  				break;
+		  			case 68: // right
+		  				skyref.$x(skyref.$x() + 0.1);
+		  				self.rndr();
+		  				break;
+		  			case 83: // down
+		  				skyref.$x(skyref.$y() + 0.1);
+		  				self.rndr();
+		  				break;
+		  		}
+		  });
+
+        $(dcv)
+        .mousedown(function (e) {
+            this.isdragging = true;
+            this.drag_start = [e.offsetX, e.offsetY];
+        })
+        .mousemove(function () {
+            this.dragged = true;
+        })
+        .mouseup(function (e) {
+            var wasdragged = this.dragged;
+            this.isdragging = false;
+            this.dragged = false;
+            var diff = [e.offsetX - this.drag_start[0], e.offsetY - this.drag_start[1]];
+            nx += diff[0] / self.get_scale_factor();
+            ny += diff[1] / self.get_scale_factor();
+
+            $(clickinfo).empty();
+            var cx = (e.offsetX - nx * self.get_scale_factor()) / self.get_scale_factor();
+            var cy = (e.offsetY - ny * self.get_scale_factor()) / self.get_scale_factor();
+            self.coord_clicked_x = cx;
+            self.coord_clicked_y = cy;
+            $(clickinfo).append('click x:' + cx + ' y:' + cy);
+
+            var skyrefs = self.enum_skyrefs();
+
+            // We can not deselect and then try to select since we will
+            // only find ourselves re-selecting the skyref that we just
+            // likely dropped. If we did not drop one then we can try to
+            // select one. 
+            if (self.skyref_selected) {
+                self.skyref_selected.$x(cx);
+                self.skyref_selected.$y(cy);
+                self.skyref_selected = null;
+                
+                // Deselect all sky refs.
+                for (var i = 0; i < skyrefs.length; ++i) {
+                    skyrefs[i].$uservalue(false);
+                }
+            } else {
+                var bw = self.skyref_box_width;
+
+                // Did we click any sky refs?
+                for (var i = 0; i < skyrefs.length; ++i) {
+                    var skyref = skyrefs[i];
+                    skyref.$uservalue(false);
+                    if (cx > skyref.x - bw * 0.50 && cx < skyref.x + bw * 0.5) {
+                        if (cy > skyref.y - bw * 0.4 && cy < skyref.y + bw * 0.4) {
+                            console.log('SELECTED');
+                            skyref.$uservalue(true);
+                            self.skyref_selected = skyref;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            self.rndr();
+        });
+
+        this.get_scale_factor = function () {
+            return Math.pow(6, scale);
+        };
+
+        this.zoom_in = function () {   
+            scale -= 0.1;
+            this.rndr();
+        };
+
+        this.zoom_out = function () {
+            scale += 0.1;
+            this.rndr();
+        };
+
+        this.refetch_image = function () {
+            if (imgctrl_db_view_id.__id == null) {
+                alert('You can not refetch was is not uploaded.');
+                return;
+            }
+            this.edit_view(imgctrl_db_view_id.__id, false);
+        }
+
+        this.edit_view = function (view_id, reset_view_coords) {
+            var self = this;
+
+            this.ioperation({
+                op:   'view.pull',
+                view_id:    view_id,
+            }, function (result) {
+                if (!result || !result.success) {
+                    alert('An error occured fetching the view/image.');
+                    return;
+                }
+
+                cv.onload = function () {
+                    if (reset_view_coords == undefined || reset_view_coords) {
+                        nx = 0;
+                        ny = 0;
+                        nw = cv.width;
+                        nh = cv.height;
+                        scale = 0.0;
+                    }
+                    self.rndr();
+                };
+
+                var quality;
+                quality = parseInt(imgctrl_fetch_quality.value);
+                if (isNaN(quality)) {
+                    quality = 15;
+                    alert('The fetched image quality has been set to 15, because the value you specified was not a number.');
+                }
+                if (quality < 1 || quality > 100) {
+                    alert('The fetched image quality has been set to 15, because the value you specified was less than 1 or greater than 100.');
+                    quality = 15;
+                }
+
+                cv.src = '/maacs/interface?op=image.fetch&image_id=' + result.image_id + '&type=jpg&quality=' + quality;
+                imgctrl_db_view_id.__id = view_id;
+                $(imgctrl_db_view_id).empty();
+                $(imgctrl_db_view_id).append('<i>This image was fetched from the database. It is already uploaded.</i>');
+
+					 self.ccc.cc_clear();
+					 
+					 var operators = result.operators ? result.operators.split(',') : [];
+					 for (var x = 0; x < operators.length; ++x) {
+					 	self.ccc.cc_force_picker('operator', { $opid: 'vary', name: operators[x] } );
+					 }
+					 var assistants = result.assistants ? result.assistants.split(',') : [];
+					 for (var x = 0; x < assistants.length; ++x) {
+					 	self.ccc.cc_force_picker('assistant', { $opid: 'vary', name: assistants[x] } );
+					 }
+					
+					 console.log('RESULT', result);
+					 
+					 var datetaken;
+					 if (result.datetaken_unix) {
+					 	var d = new Date(result.datetaken_unix * 1000);
+					 	d = [
+					 		d.getFullYear(),
+					 		new String(d.getMonth() + 1),
+					 		new String(d.getDate()),
+					 		new String(d.getHours()),
+					 		new String(d.getMinutes()),
+					 		new String(d.getSeconds()),
+					 	];
+					 	
+					 	d[1] = d[1][1] ? d[1] : '0' + d[1];
+					 	d[2] = d[2][1] ? d[2] : '0' + d[2];
+					 	d[3] = d[3][1] ? d[3] : '0' + d[3];
+					 	d[4] = d[4][1] ? d[4] : '0' + d[4];
+					 	d[5] = d[5][1] ? d[5] : '0' + d[5];
+					 	
+					 	datetaken = d[0] + '-' + d[1] + '-' + d[2] + ' ' + d[3] + ':' + d[4] + ':' + d[5];
+					 }
+					 
+					 if (result.subject)
+					 	self.ccc.cc_force_picker('subject', { $opid: 'subject', subject: result.subject });
+					 if (result.notes)
+					 	self.ccc.cc_force_picker('notes', { $opid: 'notes', notes: result.notes });
+					 if (result.shutter_time)
+					 	self.ccc.cc_force_picker('shutter_time', { $opid: 'shutter_time', shutter_time: result.shutter_time });
+					 if (result.camera)
+					 	self.ccc.cc_force_picker('camera', { $opid: 'camera', camera: result.camera });
+					 if (result.telescope)
+					 	self.ccc.cc_force_picker('telescope', { $opid: 'telescope', telescope: result.telescope });
+					 if (result.datesource)
+					 	self.ccc.cc_force_picker('datesource', { $opid: 'datesource', datesource: result.datesource });
+					 if (result.datetaken_unix) 
+					 	self.ccc.cc_force_picker('datetaken', { $opid: 'datetaken', datetaken: datetaken });
+					 if (result.white_balance)
+					 	self.ccc.cc_force_picker('white_balance', { $opid: 'white_balance', white_balance: result.white_balance });
+					 if (result.focal_length_35mm)
+					   self.ccc.cc_force_picker('focal_length_35mm', { $opid: 'focal_length_35mm', focal_length_35mm: result.focal_length_35mm });
+					 if (result.focal_length)
+					   self.ccc.cc_force_picker('focal_length', { $opid: 'focal_length', focal_length: result.focal_length });
+					 if (result.iso_speed)
+					   self.ccc.cc_force_picker('iso_speed', { $opid: 'iso_speed', iso_speed: result.iso_speed });
+					 if (result.aperture)
+					   self.ccc.cc_force_picker('aperture', { $opid: 'aperture', aperture: result.aperture });
+
+					 for (var x = 0; x < result.skyrefs.length; ++x) {
+					 	var skyref = result.skyrefs[x];
+					 	self.ccc.cc_force_picker('skyref', { 
+					 		$opid: 'skyref',
+					 		j2000_ra: skyref.j2000_ra,
+					 		j2000_de: skyref.j2000_dec,
+					 		x:        skyref.x,
+					 		y:        skyref.y,
+					 		cat:      skyref.cat,
+					 		id:       skyref.id,					 		
+					 	});
+					 }					   
+					                 
+                /*
+                $(imgctrl_skyrefs).empty();
+                for (var x = 0; x < result.skyrefs.length; ++x) {
+                    var skyref = result.skyrefs[x];
+                    self.add_sky_ref({
+                        j2000_ra:     skyref.j2000_ra,
+                        j2000_dec:    skyref.j2000_dec,
+                        x:            skyref.x,
+                        y:            skyref.y,
+                        id:           skyref.id,
+                        cat:          skyref.cat,
+                    }); 
+                }
+                */
+            });
+            alert('Fetching view/image..');
+        };
+        
+		  var self = this;
+
+        this.imgctrl_picked_image = function () {
+            var fnode = fimg_up.files[0];
+            imgctrl_db_view_id.__id = null;
+            $(imgctrl_db_view_id).empty();
+            $(imgctrl_db_view_id).append('<i>This image is not uploaded yet! Do not forget to push it!</i>');
+            //var tmpimg = new Image();
+            // fnode.name, fnode.size, fnode.type
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                imgctrl_db_view_id.__id = null;
+                //tmpimg.src = e.target.result;
+                //cv = document.createElement('canvas');
+                //cv.width = tmpimg.width;
+                //cv.height = tmpimg.height;
+                //var ctx = cv.getContext('2d');
+                //ctx.drawImage(tmpimg, 0, 0);
+                nx = 0;
+                ny = 0;
+                cv.src = e.target.result;
+                nw = cv.width;
+                nh = cv.height;
+                scale = 0.0;
+                self.rndr();
+            };
+            $(imgctrl_db_view_id).empty();
+            $(imgctrl_db_view_id).append('<i>Image To Be.. Uploaded Into Database</i>');
+            reader.readAsDataURL(fnode);
+        };
+
+        return this;
+    }
+
+	var maacsiface = new MaacsInterface({
+	    query_cont:         query_cont,
+	    canvas_wrapper:		canvas_wrapper,
+	    img_params_cont:		imgctrl_img_params_cont,
+	});
+</script>
+</body>
+</html>

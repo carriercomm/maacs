@@ -1,0 +1,13 @@
+extends layout
+
+include mixins/form
+
+block tools
+  mixin tools('show', page.wikiname)
+
+block content
+
+  #content.show
+    mixin notice()
+    mixin warning()
+    !=content

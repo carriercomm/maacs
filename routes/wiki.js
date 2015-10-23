@@ -86,6 +86,44 @@ function _getWikiPage(req, res) {
       res.locals.notice = req.session.notice;
       delete req.session.notice;
 
+      /* check if page is limited to only specified authorized viewers */
+      var lines = page.content.split('\n');
+      var user_email;
+      if (req.user) {
+          user_email = req.user.email;
+      } else {
+          user_email = null;
+      }
+      
+      var can_view = null;
+      var allowed_users = [];
+      for (var n = 0; (n < 20) && (n < lines.length); ++n) {
+          var line = lines[n];
+          if (line.indexOf('@restrict-to:') == 0) {
+              if (can_view == null) {
+                  can_view = false;
+	      }
+	      var pats = line.substr(13).trim().split(',');
+              allowed_users.push(pats);
+              if (user_email) {
+     	          for (var x = 0; x < pats.length; ++x) {
+                      if (pats[x] == user_email) {
+                          can_view = true;
+                      }
+                  }
+	      }
+	  }
+      }
+
+      if (can_view == false && can_view != null) { 
+          page.content = '# Restricted Page\nThis page has been restricted by the following directives:\n\n' + allowed_users.join('\n\n') + '\n\n';
+	  if (!req.user) {
+               page.content += 'You currently do not _appear_ to be logged into the system. _Try logging into the system._';
+          } else {
+               page.content += 'You are currently logged into the system with the email address of "' + user_email + '".';
+          }
+      }
+
       res.render("show", {
         page: page,
         title: app.locals.config.get("application").title + " – " + page.title,
